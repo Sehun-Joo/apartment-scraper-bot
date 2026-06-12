@@ -26,17 +26,28 @@ const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
 const configPath = path.join(__dirname, 'config.json');
 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 const allowedBedrooms = config.filters?.bedrooms || [1, 2];
+const minPrice = config.filters?.minPrice || 0;
+const maxPrice = config.filters?.maxPrice || 99999;
+const ignoreMonths = config.filters?.ignoreMonths || [];
 
 // 3. Load seen listings database
 const seenListingsPath = path.join(__dirname, 'seen_listings.json');
-let seenListings = [];
+let seenListings = {};
 let isFirstRun = false;
 
 if (fs.existsSync(seenListingsPath)) {
   try {
-    seenListings = JSON.parse(fs.readFileSync(seenListingsPath, 'utf8'));
-    console.log(`Loaded ${seenListings.length} previously seen listings.`);
-    if (seenListings.length === 0) {
+    const rawData = JSON.parse(fs.readFileSync(seenListingsPath, 'utf8'));
+    if (Array.isArray(rawData)) {
+      console.log('Migrating seen_listings.json from array to object map.');
+      for (const id of rawData) {
+        seenListings[id] = 0; // Unknown previous price
+      }
+    } else {
+      seenListings = rawData;
+    }
+    console.log(`Loaded ${Object.keys(seenListings).length} previously seen listings.`);
+    if (Object.keys(seenListings).length === 0) {
       console.log('Database is empty. Setting to first run configuration.');
       isFirstRun = true;
     }
@@ -137,7 +148,7 @@ async function main() {
     console.warn('⚠️ WARNING: DISCORD_WEBHOOK_URL is not configured in environment or .env!');
   }
 
-  let allScrapedUnitIds = [];
+  let allScrapedUnits = {};
   let newUnits = [];
 
   for (const target of config.targets) {
@@ -150,17 +161,38 @@ async function main() {
       const units = await fetchUnits(communityId, target.url);
       console.log(`Total units available on site: ${units.length}`);
 
-      // 3. Filter units (1bed and 2bed)
-      const filteredUnits = units.filter(unit => allowedBedrooms.includes(unit.bedroomNumber));
-      console.log(`Units matching bedroom filters (${allowedBedrooms.join('/')} Bed): ${filteredUnits.length}`);
+      // 3. Filter units (beds, budget, date)
+      const filteredUnits = units.filter(unit => {
+        if (!allowedBedrooms.includes(unit.bedroomNumber)) return false;
+        
+        const price = unit.startingAtPricesUnfurnished?.prices?.totalPrice || unit.startingAtPricesUnfurnished?.prices?.price;
+        if (price && (price < minPrice || price > maxPrice)) return false;
+
+        if (unit.availableDateUnfurnished && ignoreMonths.length > 0) {
+          const date = new Date(unit.availableDateUnfurnished);
+          if (ignoreMonths.includes(date.getMonth() + 1)) return false;
+        }
+
+        return true;
+      });
+      console.log(`Units matching all filters: ${filteredUnits.length}`);
 
       for (const unit of filteredUnits) {
-        allScrapedUnitIds.push(unit.unitId);
+        const price = unit.startingAtPricesUnfurnished?.prices?.totalPrice || unit.startingAtPricesUnfurnished?.prices?.price || 0;
+        allScrapedUnits[unit.unitId] = price;
         
         // If not seen before, mark as new
-        if (!seenListings.includes(unit.unitId)) {
-          newUnits.push({ unit, communityName });
+        if (!(unit.unitId in seenListings)) {
+          newUnits.push({ unit, communityName, isPriceDrop: false, oldPrice: null });
+        } else {
+          // Check for price drop
+          const oldPrice = seenListings[unit.unitId];
+          if (oldPrice > 0 && price > 0 && price < oldPrice) {
+            newUnits.push({ unit, communityName, isPriceDrop: true, oldPrice });
+          }
         }
+        // Update price in database
+        seenListings[unit.unitId] = price;
       }
     } catch (err) {
       console.error(`❌ Error scraping target ${target.name}:`, err.message);
@@ -170,21 +202,20 @@ async function main() {
   // 4. Handle notifications based on run state
   if (isFirstRun) {
     console.log('First run: Saving all current listings to database without triggering individual alerts.');
-    fs.writeFileSync(seenListingsPath, JSON.stringify(allScrapedUnitIds, null, 2));
-    await sendInitNotification(webhookUrl, allScrapedUnitIds.length);
+    fs.writeFileSync(seenListingsPath, JSON.stringify(allScrapedUnits, null, 2));
+    await sendInitNotification(webhookUrl, Object.keys(allScrapedUnits).length);
   } else {
     if (newUnits.length > 0) {
-      console.log(`Found ${newUnits.length} new listings! Sending notifications...`);
+      console.log(`Found ${newUnits.length} new listings or price drops! Sending notifications...`);
       for (const item of newUnits) {
-        await sendDiscordNotification(webhookUrl, item.unit, item.communityName);
-        seenListings.push(item.unit.unitId);
+        await sendDiscordNotification(webhookUrl, item.unit, item.communityName, item.isPriceDrop, item.oldPrice);
       }
-      // Save updated database
-      fs.writeFileSync(seenListingsPath, JSON.stringify(seenListings, null, 2));
-      console.log('Database updated with new listings.');
     } else {
-      console.log('No new listings found in this run.');
+      console.log('No new listings or price drops found in this run.');
     }
+    // Always save updated database to capture price changes (increases) and migrations
+    fs.writeFileSync(seenListingsPath, JSON.stringify(seenListings, null, 2));
+    console.log('Database saved.');
   }
 }
 

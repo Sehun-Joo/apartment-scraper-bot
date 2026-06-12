@@ -3,8 +3,10 @@
  * @param {string} webhookUrl - The Discord Webhook URL.
  * @param {object} unit - The unit data object from Avalon Communities API.
  * @param {string} communityName - The name of the community (e.g. AVA DoBro).
+ * @param {boolean} isPriceDrop - Whether this is a price drop alert.
+ * @param {number} oldPrice - The previous price, if applicable.
  */
-export async function sendDiscordNotification(webhookUrl, unit, communityName) {
+export async function sendDiscordNotification(webhookUrl, unit, communityName, isPriceDrop = false, oldPrice = null) {
   if (!webhookUrl) {
     console.warn('DISCORD_WEBHOOK_URL is not set. Skipping notification.');
     return;
@@ -16,7 +18,11 @@ export async function sendDiscordNotification(webhookUrl, unit, communityName) {
   
   let priceStr = 'Contact for pricing';
   if (totalPrice) {
-    priceStr = `**$${totalPrice.toLocaleString()}/mo** (Total)`;
+    if (isPriceDrop && oldPrice) {
+      priceStr = `~~$${oldPrice.toLocaleString()}~~ ➡️ **$${totalPrice.toLocaleString()}/mo** (Total)`;
+    } else {
+      priceStr = `**$${totalPrice.toLocaleString()}/mo** (Total)`;
+    }
     if (netEffective && netEffective < totalPrice) {
       priceStr += `\n*$${netEffective.toLocaleString()}/mo net effective*`;
     }
@@ -56,8 +62,9 @@ export async function sendDiscordNotification(webhookUrl, unit, communityName) {
     promoText = unit.promotions.map(p => `• **${p.promotionTitle}**: ${p.promotionDescription}`).join('\n');
   }
 
+  const titlePrefix = isPriceDrop ? '📉 PRICE DROP!' : '🏢 New Listing!';
   const embed = {
-    title: `🏢 New ${beds} Available - Unit ${unit.unitName}`,
+    title: `${titlePrefix} ${beds} - Unit ${unit.unitName}`,
     url: unit.url || 'https://www.avaloncommunities.com',
     color: 983063, // 0x0EA5E9 (sky-500)
     fields: [

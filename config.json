@@ -10,6 +10,9 @@
     }
   ],
   "filters": {
-    "bedrooms": [1, 2]
+    "bedrooms": [1, 2],
+    "minPrice": 4000,
+    "maxPrice": 6000,
+    "ignoreMonths": [6, 7]
   }
 }
