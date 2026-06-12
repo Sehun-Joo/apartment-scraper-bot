@@ -26,7 +26,13 @@ export async function sendDiscordNotification(webhookUrl, unit, communityName) {
 
   const beds = unit.bedroomNumber === 0 ? 'Studio' : `${unit.bedroomNumber} Bed`;
   const baths = `${unit.bathroomNumber} Bath`;
-  const sqft = unit.squareFeet ? `${unit.squareFeet.toLocaleString()} sqft` : 'N/A';
+  let sqft = unit.squareFeet ? `${unit.squareFeet.toLocaleString()} sqft` : 'N/A';
+  if (unit.squareFeet && (totalPrice || basePrice)) {
+    const rent = totalPrice || basePrice;
+    const annualRent = rent * 12;
+    const ppsf = Math.round(annualRent / unit.squareFeet);
+    sqft += `\n*$${ppsf}/ft²*`;
+  }
   
   // Format availability date
   let availDate = 'Immediate';
