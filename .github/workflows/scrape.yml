@@ -2,8 +2,8 @@ name: Hourly Apartment Scraper
 
 on:
   schedule:
-    # Run every hour at the top of the hour
-    - cron: '0 * * * *'
+    # Run every 30 minutes
+    - cron: '*/30 * * * *'
   workflow_dispatch:
     # Allow manual execution from the GitHub Actions tab
 
