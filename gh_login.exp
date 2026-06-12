@@ -1,0 +1,27 @@
+#!/usr/bin/expect -f
+set timeout -1
+spawn /opt/homebrew/bin/gh auth login -h github.com -p https -w
+
+expect {
+    "Authenticate Git with your GitHub credentials?" {
+        send "Y\r"
+        exp_continue
+    }
+    "First copy your one-time code:" {
+        expect -re "([A-Z0-9]{4}-[A-Z0-9]{4})"
+        set code $expect_out(1,string)
+        
+        puts "\n\n========================================="
+        puts "YOUR GITHUB LOGIN CODE IS: $code"
+        puts "=========================================\n\n"
+        
+        expect "Press Enter to open github.com in your browser..."
+        send "\r"
+        
+        # Now wait for the auth to complete
+        expect "Logged in as"
+    }
+    "already logged into github.com" {
+        puts "\nYou are already logged in!\n"
+    }
+}

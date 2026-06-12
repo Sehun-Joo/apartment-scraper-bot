@@ -1,0 +1,14 @@
+node_modules/
+.env
+*.log
+
+# Temp scratch/test files
+test_scrape.js
+test_api_fetch.js
+test_full_fetch.js
+inspect_json.js
+inspect_both.js
+page_content.html
+screenshot.png
+units_*.json
+last_json_response.json

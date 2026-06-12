@@ -1,0 +1,15 @@
+{
+  "targets": [
+    {
+      "name": "AVA DoBro",
+      "url": "https://www.avaloncommunities.com/new-york/brooklyn-apartments/ava-dobro/"
+    },
+    {
+      "name": "Avalon Willoughby Square",
+      "url": "https://www.avaloncommunities.com/new-york/brooklyn-apartments/avalon-willoughby-square/"
+    }
+  ],
+  "filters": {
+    "bedrooms": [1, 2]
+  }
+}
